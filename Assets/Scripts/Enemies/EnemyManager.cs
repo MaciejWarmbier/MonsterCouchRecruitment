@@ -7,6 +7,8 @@ namespace Enemies
     {
         [SerializeField] private Enemy enemyPrefab;
         [SerializeField] private float enemySpeed;
+        [SerializeField] private float ignoreDirectionTime = 0.5f;
+        [SerializeField] private float randomDirectionFactor = 0.3f;
         
         [Header("Spawn Settings")]
         [SerializeField] private int enemyCount = 1000;
@@ -77,11 +79,46 @@ namespace Enemies
                 if (_enemies[i].IsFrozen)
                     continue;
                 
+                //checking if should ignore player still or if timer run out
+                if (_enemies[i].IgnorePlayerDirection)
+                {
+                    _enemies[i].IgnorePlayerTimer -= deltaTime;
+                    if (_enemies[i].IgnorePlayerTimer <= 0f)
+                        _enemies[i].IgnorePlayerDirection = false;
+                }
+                
+                //checking if should ignore player as it hit wall before
+                if (!_enemies[i].IgnorePlayerDirection)
+                {
+                    Vector2 away = (Vector2)_enemies[i].EnemyObject.transform.position - _playerPosition;
+                    _enemies[i].Direction = Vector2.Lerp(_enemies[i].Direction, away.normalized, 0.05f);
+                }
+
                 Vector2 pos = _enemies[i].EnemyObject.transform.position + _enemies[i].Direction * (enemySpeed * deltaTime);
                 
-                pos.x = Mathf.Clamp(pos.x, -_screenBounds.x, _screenBounds.x);
-                pos.y = Mathf.Clamp(pos.y, -_screenBounds.y, _screenBounds.y);
+                //checking for hitting wall
+                bool hitWall = false;
+                if (pos.x < -_screenBounds.x || pos.x > _screenBounds.x)
+                {
+                    _enemies[i].Direction.x = -_enemies[i].Direction.x;
+                    pos.x = Mathf.Clamp(pos.x, -_screenBounds.x, _screenBounds.x);
+                    hitWall = true;
+                }
+                if (pos.y < -_screenBounds.y || pos.y > _screenBounds.y)
+                {
+                    _enemies[i].Direction.y = -_enemies[i].Direction.y;
+                    pos.y = Mathf.Clamp(pos.y, -_screenBounds.y, _screenBounds.y);
+                    hitWall = true;
+                }
 
+                //if hitting wall we want for them to ignore player for a bit for a better play
+                if (hitWall)
+                {
+                    _enemies[i].IgnorePlayerDirection = true;
+                    _enemies[i].IgnorePlayerTimer = UnityEngine.Random.value * ignoreDirectionTime;
+                    _enemies[i].Direction = UnityEngine.Random.insideUnitCircle.normalized;
+                }
+                
                 _enemies[i].EnemyObject.transform.position = pos;
                 
                 if (EnemyHelpers.IsInRange(pos, _playerPosition, _touchDistanceSqr))
@@ -121,8 +158,17 @@ namespace Enemies
             for (int i = 0; i < _enemies.Length; i++)
             {
                 if (_enemies[i].IsFrozen) continue;
-                Vector2 dir = (Vector2)_enemies[i].EnemyObject.transform.position - playerPos;
-                _enemies[i].Direction = dir.normalized;
+                
+                if (_enemies[i].IgnorePlayerDirection) continue;
+                
+                Vector2 baseDir = (Vector2)_enemies[i].EnemyObject.transform.position - playerPos;
+                baseDir.Normalize();
+
+                Vector2 randomOffset = UnityEngine.Random.insideUnitCircle * randomDirectionFactor; 
+
+                Vector2 finalDir = (baseDir + randomOffset).normalized;
+                
+                _enemies[i].Direction = finalDir.normalized;
             }
         }
     }
